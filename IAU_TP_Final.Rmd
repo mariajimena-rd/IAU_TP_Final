@@ -1,0 +1,260 @@
+---
+title: "Instrumentos de Análisis Territorial Aplicados a Estudios Urbanos – UTDT"
+author: "Ma. Jimena Ramirez Dimitrijewits"
+date: '2023'
+output: html_document
+---
+
+------------------------------
+
+### Trabajo Final
+
+## Espacios Culturales en Ciudad Autónoma de Buenos Aires
+
+
+
+------------------------------
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(sf)
+library(knitr)
+```
+
+
+```{r}
+opts_chunk$set(fig.width = 10, fig.height = 7)
+```
+
+```{r}
+cultura <- st_read("data/espacios-culturales.shp",
+                   stringsAsFactors=TRUE,
+                   options="ENCODING=UTF-8")
+```
+
+```{r}
+summary(cultura)
+```
+
+
+```{r}
+cultura <- cultura %>%
+  select(fid, FUNCION_PR, ESTABLECIM, CALLE, ALTURA, BARRIO, COMUNA, DIRECCION, LONGITUD, LATITUD, geometry)
+```
+
+```{r}
+summary(cultura)
+```
+
+
+```{r}
+unique(cultura$FUNCION_PR)
+```
+
+```{r}
+cultura <- cultura %>%
+  mutate(FUNCION_PR=case_when(FUNCION_PR %in% c("CLUB DE MUSICA EN VIVO - NUEVO", "CLUB DE MUSICA EN VIVO")~"CLUB DE MUSICA", TRUE~FUNCION_PR))
+```
+
+```{r}
+unique(cultura$FUNCION_PR)
+```
+
+```{r}
+barrios <- st_read("data/barrios_wgs84.shp",
+                   stringsAsFactors=TRUE,
+                   options="ENCODING=UTF-8")
+```
+
+```{r}
+summary(barrios)
+```
+
+
+```{r}
+ggplot()+
+  geom_sf(data = barrios, alpha=0.2)+
+  geom_sf(data = cultura, aes(color="#22577a"), alpha=0.4)+
+  scale_color_identity()+
+  theme_light()
+```
+
+
+```{r, fig.width = 10, fig.height = 4}
+ggplot(cultura)+
+  geom_bar(aes(x= FUNCION_PR), fill="#22577a")+
+  geom_text(stat = "count", aes(x = FUNCION_PR, label = stat(count)), hjust = -0.2, vjust = 0.5, size = 3)+
+  labs(title="Cantidad de Espacios Culturales por Tipo",
+       subtitle = "Ciudad Autonoma de Buenos Aires",
+       x="Tipo de Establecimiento",
+       y="Cantidad")+
+  theme_light()+
+  coord_flip()
+```
+
+
+```{r}
+unique(cultura$COMUNA)
+```
+
+```{r}
+summary(cultura$COMUNA)
+```
+
+```{r}
+cultura <- cultura %>%
+  filter(COMUNA != "COMUNA NA")
+```
+
+```{r}
+unique(cultura$COMUNA)
+```
+
+
+```{r, fig.width = 10, fig.height = 10}
+ggplot(cultura)+
+  geom_bar(aes(x= FUNCION_PR, fill=FUNCION_PR))+
+  labs(title="Cantidad de Espacios Culturales por Tipo",
+       subtitle = "Comunas - Ciudad Autonoma de Buenos Aires",
+       x="Tipo de Establecimiento",
+       y="Cantidad")+
+  theme_light()+
+  theme(legend.key.size = unit(0.4, "cm"),
+    legend.key.width = unit(0.4, "cm"),
+    legend.position = "top")+
+  coord_flip()+
+  facet_wrap(~ COMUNA, ncol = 5)+
+  guides(fill = guide_legend(title = NULL))+
+  scale_x_discrete(labels = NULL)
+```
+
+
+```{r}
+cultura_barrio <- cultura %>% 
+  group_by(BARRIO) %>% 
+  summarise(cantidad=n())
+```
+
+```{r}
+head(cultura_barrio)
+```
+
+
+```{r}
+cultura_barrio <- cultura_barrio %>% 
+  st_drop_geometry()
+```
+
+```{r}
+head(cultura_barrio)
+```
+
+```{r}
+class(cultura_barrio)
+```
+
+```{r}
+cultura_barrio <- as.data.frame(cultura_barrio)
+```
+
+```{r}
+class(cultura_barrio)
+```
+
+```{r}
+cultura_barrio <- left_join(barrios, cultura_barrio, by="BARRIO")
+```
+
+
+```{r}
+head(cultura_barrio)
+```
+
+
+```{r}
+class(cultura_barrio)
+```
+
+
+```{r}
+ggplot()+
+  geom_sf(data = cultura_barrio, aes(fill = cantidad), color="white")+
+  labs(title = "Cantidad de Espacios Culturales por Barrio",
+    subtitle = "Ciudad Autonoma de Buenos Aires",
+    fill = "Cantidad")+
+  scale_fill_gradient(low = "#f5f3f4", high = "#22577a")+
+  theme_light()
+```
+
+
+```{r}
+ggplot()+
+  geom_sf(data = cultura_barrio, aes(fill = cantidad/AREA*1000000), color="white")+
+  labs(title = "Espacios Culturales por Km2",
+    subtitle = "Ciudad Autonoma de Buenos Aires",
+    fill = "Cantidad/Km2")+
+  scale_fill_gradient(low = "#f5f3f4", high = "#22577a")+
+  theme_light()
+```
+
+
+```{r}
+ggplot()+
+  geom_bin2d(data = cultura, aes(x = LONGITUD, y = LATITUD), bins = 40)+
+  geom_sf(data = barrios, alpha=0)+
+  labs(title = "Densidad de Espacios Culturales",
+    subtitle = "Ciudad Autonoma de Buenos Aires")+
+  scale_fill_gradient(low = "#ffc300", high = "#22577a")+
+  theme_light()+
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_blank())+
+  guides(fill = guide_colorbar(title = NULL))
+```
+
+
+
+```{r, fig.width = 15, fig.height = 12}
+ggplot()+
+  geom_bin2d(data = cultura, aes(x = LONGITUD, y = LATITUD), show.legend = FALSE, bins = 40)+
+  geom_sf(data = barrios, alpha=0)+
+  labs(title = "Densidad de Espacios Culturales",
+    subtitle = "Ciudad Autonoma de Buenos Aires")+
+  scale_fill_gradient(low = "#ffc300", high = "#22577a")+
+  theme_light()+
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        text = element_text(size = 12),
+        plot.title = element_text(size = 20, face = "bold"),
+        plot.subtitle = element_text(size = 18))+
+  facet_wrap(~FUNCION_PR, ncol = 5)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
