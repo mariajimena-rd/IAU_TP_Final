@@ -11,9 +11,14 @@ output: html_document
 
 ## Espacios Culturales en Ciudad Autónoma de Buenos Aires
 
-
+En el presente trabajo se propone analizar **cómo se distribuyen los Establecimientos Culturales en la Ciudad Autónoma de Buenos Aires** (CABA). Se realizará una exploración de los datos publicados en el portal de datos la ciudad *[BA Data](https://data.buenosaires.gob.ar/dataset/)* a través de las herramientas incorporadas en la materia **Instrumentos de Análisis Territorial Aplicados a Estudios Urbanos** de la Maestría en Economía Urbana.
 
 ------------------------------
+
+
+### Configuración Inicial
+
+Se comienza con la activación de librerías a utilizar para el desarrollo del trabajo.
 
 ```{r message=FALSE, warning=FALSE}
 library(tidyverse)
@@ -22,9 +27,9 @@ library(knitr)
 ```
 
 
-```{r}
-opts_chunk$set(fig.width = 10, fig.height = 7)
-```
+### Importación y Exploración de Datos
+
+En primer lugar se procede a importar y explorar el dataframe con información sobre **Establecimientos Culturales** de la ciudad.
 
 ```{r}
 cultura <- st_read("data/espacios-culturales.shp",
@@ -36,20 +41,29 @@ cultura <- st_read("data/espacios-culturales.shp",
 summary(cultura)
 ```
 
+Se puede observar que la base en estudio consiste en una base de tipo **sf** (Simple Feature), con 3031 registros y 31 variables entre las cuales se puede destacar **FUNCION_PR** (Función principal del Establecimiento Cultural), **BRRIO**, **COMUNA**, **LONGITUD**, **LATITUD** y **geometry**.
+
+A los fines del presente trabajo se realiza una limpieza del dataframe para facilitar su posterior manipulación.
 
 ```{r}
 cultura <- cultura %>%
-  select(fid, FUNCION_PR, ESTABLECIM, CALLE, ALTURA, BARRIO, COMUNA, DIRECCION, LONGITUD, LATITUD, geometry)
+  select(fid, FUNCION_PR, ESTABLECIM, BARRIO, COMUNA, DIRECCION, LONGITUD, LATITUD, geometry)
 ```
 
 ```{r}
+dim(cultura)
 summary(cultura)
 ```
 
+Habiendo seleccionado 9 variables de mayor interés se obtuvo un nuevo dataframe que mantiene los 3031 registros y dentro del cual, si se observa a los establecimientos según su función principal, ya se puede detectar preponderancia de bibliotecas con 619 establecimientos, seguido de centros culturales (435) y librerías (350).
+
+Para hacer foco en la función de los establecimientos se verifica primero cuales son las diferentes funciones listadas en la base en estudio.
 
 ```{r}
 unique(cultura$FUNCION_PR)
 ```
+
+Se distinguen 16 funciones. Entre ellas se diferencia entre **CLUB DE MUSICA** y **CLUB DE MUSICA – NUEVO**. Dado que tal distinción no es relevante a los fines de nuestro análisis se unifican para luego ilustrar la informacón mediante un gráfico de barras.
 
 ```{r}
 cultura <- cultura %>%
@@ -59,6 +73,98 @@ cultura <- cultura %>%
 ```{r}
 unique(cultura$FUNCION_PR)
 ```
+
+```{r, fig.width = 10, fig.height = 4}
+ggplot(cultura %>% 
+         mutate(FUNCION_PR = factor(FUNCION_PR,
+                                    levels = levels(factor(FUNCION_PR,
+                                                           ordered = TRUE))[order(table(FUNCION_PR))])))+
+  geom_bar(aes(x = FUNCION_PR), fill="#748CAB")+
+  geom_text(stat = "count", aes(x = FUNCION_PR, label = stat(count)), hjust = -0.2, vjust = 0.5, size = 3)+
+  labs(title = "Cantidad de Espacios Culturales por Tipo",
+       subtitle = "Ciudad Autonoma de Buenos Aires",
+       x = "Tipo de Establecimiento",
+       y = "Cantidad")+
+  theme_light()+
+  coord_flip()
+```
+
+En este primer gráfico se pueden visualizar los establecimientos culturales de la CABA categorizados en 15 funciones principales, con sus respectivas cantidades. Se observa gran variación de la cantidad de establecimientos según su función con un máximo de 619 que hace referencia a las bibliotecas y un mínimo de 22 correspondiente a las salas de cine.
+
+A su vez se puede ver cierta variación en las funciones identificadas, teniendo algunas un carácter más vinculado a lo comercial, recreativo o de formación. El presente trabajo pretende hacer foco en establecimientos de difusión cultural en la CABA, motivo por el cual se procede a acotar la base conservándose solo los espacios de lectura, exposición y espectáculo.
+
+```{r}
+dif_cultural <- cultura %>% 
+  filter(FUNCION_PR %in% c("BIBLIOTECA", "CENTRO CULTURAL", "SALA DE TEATRO", "MONUMENTOS Y LUGARES HISTORICOS", "MUSEO", "GALERIA DE ARTE", "CLUB DE MUSICA", "ANFITEATRO", "SALA DE CINE"))
+```
+
+```{r}
+dif_cultural <- dif_cultural %>% 
+  mutate(FUNCION_PR=as_factor(FUNCION_PR))
+```
+
+```{r}
+summary(dif_cultural$FUNCION_PR)
+```
+
+Habiendo logrado acotar nuestro universo a 9 categorías, 9 **Tipos de Establecimientos Culturales en la CABA**, se puede enriquecer el análisis visualizando su distribución geográfica.
+
+
+### Visualización de la Distribución Geográfica
+
+Para una primera aproximación geoespacial, se procederá a analizar como se distribuye la oferta de espacios culturales entre las 15 comunas de la CABA.
+
+Para esto, primero se verifica como esta compuesta la variable **COMUNA** en nuestro **df**.
+
+```{r}
+class(dif_cultural$COMUNA)
+summary(dif_cultural$COMUNA)
+```
+
+```{r}
+dim(dif_cultural)
+```
+
+Se puede ver que la variable **COMUNA** es de tipo **factor**, que cuenta con registros para las 15 comunas de la ciudad, y que existe un único registro, entre 2111, que no tiene variable asignada.
+
+Se procede a hacer una limpieza eliminando el registro sin comuna asignada y convirtiendo la variable a numérica para facilitar su orden.
+
+```{r}
+dif_cultural <- dif_cultural %>%
+  filter(COMUNA != "COMUNA NA")
+```
+
+```{r}
+summary(dif_cultural$COMUNA)
+```
+
+```{r}
+dif_cultural <- dif_cultural %>% 
+  mutate(COMUNA = as.numeric(sub("COMUNA ", "", as.character(COMUNA))))
+```
+
+```{r}
+class(dif_cultural$COMUNA)
+```
+
+```{r, fig.width = 10, fig.height = 6}
+ggplot(dif_cultural %>% 
+         mutate(FUNCION_PR = factor(FUNCION_PR,
+                                    levels = levels(factor(FUNCION_PR,
+                                                           ordered = TRUE))[order(table(FUNCION_PR))])))+
+  geom_bar(aes(x = FUNCION_PR), fill="#748CAB")+
+  labs(title = "Cantidad de Espacios Culturales por Tipo",
+       subtitle = "en las 15 Comunas de la Ciudad Autonoma de Buenos Aires",
+       x = NULL,
+       y = "Cantidad")+
+  theme_light()+
+  coord_flip()+
+  facet_wrap(~ COMUNA, ncol = 5)
+```
+
+En este gráfico de barras facetado por comuna se visualiza fácilmente la mayor concentración de espacios culturales en la Comuna 1. A su vez se puede corroborar que en todas las comunas en general se sostiene la preponderancia de bibliotecas, centros culturales y teatros.
+
+Para quienes conocen la CABA es fácil comprender la concentración en la Comuna 1 dado que en esta comuna se sitúa el Microcentro porteño. Sin embargo, para ilustrar mejor esta información es conveniente realizar un mapeo de los datos y para esto se procede a importar el mapa base de los barrios la CABA.
 
 ```{r}
 barrios <- st_read("data/barrios_wgs84.shp",
@@ -70,67 +176,22 @@ barrios <- st_read("data/barrios_wgs84.shp",
 summary(barrios)
 ```
 
+Habiendo verificado que **barrios** es una base de tipo geográfico compuesta por 48 polígonos relativos a los 48 barrios porteños, se procede a mapearla junto con los datos de **dif_cultural**.
 
-```{r}
+```{r, fig.width = 8, fig.height = 8}
 ggplot()+
   geom_sf(data = barrios, alpha=0.2)+
-  geom_sf(data = cultura, aes(color="#22577a"), alpha=0.4)+
+  geom_sf(data = dif_cultural, aes(color="#184e77"), alpha=0.4)+
   scale_color_identity()+
   theme_light()
 ```
 
+En este mapeo preliminar, y nuevamente para quien conoce a la CABA, ya se puede previsualizar, coincidiendo con nuestro gráfico facetado, una fuerte concentración de espacios culturales en el centro de la ciudad, más precisamente en el barrio de San Nicolás y aledaños.
 
-```{r, fig.width = 10, fig.height = 4}
-ggplot(cultura)+
-  geom_bar(aes(x= FUNCION_PR), fill="#22577a")+
-  geom_text(stat = "count", aes(x = FUNCION_PR, label = stat(count)), hjust = -0.2, vjust = 0.5, size = 3)+
-  labs(title="Cantidad de Espacios Culturales por Tipo",
-       subtitle = "Ciudad Autonoma de Buenos Aires",
-       x="Tipo de Establecimiento",
-       y="Cantidad")+
-  theme_light()+
-  coord_flip()
-```
-
+Probablemente un mapa coroplético con los nombres de los barrios pueda dar mayor claridad. Para esto se procede a agrupar la cantidad de establecimientos culturales por barrio y a unir estos datos con los del mapa base.
 
 ```{r}
-unique(cultura$COMUNA)
-```
-
-```{r}
-summary(cultura$COMUNA)
-```
-
-```{r}
-cultura <- cultura %>%
-  filter(COMUNA != "COMUNA NA")
-```
-
-```{r}
-unique(cultura$COMUNA)
-```
-
-
-```{r, fig.width = 10, fig.height = 10}
-ggplot(cultura)+
-  geom_bar(aes(x= FUNCION_PR, fill=FUNCION_PR))+
-  labs(title="Cantidad de Espacios Culturales por Tipo",
-       subtitle = "Comunas - Ciudad Autonoma de Buenos Aires",
-       x="Tipo de Establecimiento",
-       y="Cantidad")+
-  theme_light()+
-  theme(legend.key.size = unit(0.4, "cm"),
-    legend.key.width = unit(0.4, "cm"),
-    legend.position = "top")+
-  coord_flip()+
-  facet_wrap(~ COMUNA, ncol = 5)+
-  guides(fill = guide_legend(title = NULL))+
-  scale_x_discrete(labels = NULL)
-```
-
-
-```{r}
-cultura_barrio <- cultura %>% 
+cultura_barrio <- dif_cultural %>% 
   group_by(BARRIO) %>% 
   summarise(cantidad=n())
 ```
@@ -138,7 +199,6 @@ cultura_barrio <- cultura %>%
 ```{r}
 head(cultura_barrio)
 ```
-
 
 ```{r}
 cultura_barrio <- cultura_barrio %>% 
@@ -165,76 +225,124 @@ class(cultura_barrio)
 cultura_barrio <- left_join(barrios, cultura_barrio, by="BARRIO")
 ```
 
-
 ```{r}
 head(cultura_barrio)
 ```
-
 
 ```{r}
 class(cultura_barrio)
 ```
 
 
-```{r}
+```{r, fig.width = 11, fig.height = 11}
 ggplot()+
   geom_sf(data = cultura_barrio, aes(fill = cantidad), color="white")+
+  geom_sf_label(data=cultura_barrio, aes(label=BARRIO), size = 2, nudge_y = 0.0012,
+                label.padding = unit(0.1, "lines"), 
+                label.r = unit(0.1, "lines"),
+                fontface = "bold")+
+  geom_sf_label(data=cultura_barrio, aes(label=cantidad), size = 2.5, nudge_y = -0.0012,
+                label.padding = unit(0.1, "lines"), 
+                label.r = unit(0.1, "lines"),
+                fontface = "bold")+
   labs(title = "Cantidad de Espacios Culturales por Barrio",
     subtitle = "Ciudad Autonoma de Buenos Aires",
-    fill = "Cantidad")+
-  scale_fill_gradient(low = "#f5f3f4", high = "#22577a")+
-  theme_light()
+    fill = "Cantidad",
+    x = NULL,
+    y = NULL)+
+  scale_fill_gradient(low = "#e2e7ee", high = "#184e77")+
+  theme_light()+
+  theme(legend.position = "bottom")
 ```
 
+En el mapa se observa claramente la presencia de una mayor cantidad de establecimientos de difusión cultural en la zona este (Centro Porteño) y norte de la ciudad. Se destacan en primer lugar los barrios de Recoleta y San Nicolás con 245 y 226 establecimientos respectivamente, seguidos por Palermo (211), Monserrat (179) y Balvanera (156).
 
-```{r}
+```{r message=FALSE, warning=FALSE}
+require(gridExtra)
+```
+
+```{r warning=FALSE}
+mapa1 <- ggplot()+
+  geom_sf(data = barrios, alpha=0.2)+
+  geom_sf(data = dif_cultural, aes(color="#184e77"), alpha=0.4)+
+  scale_color_identity()+
+  theme_light()
+
+mapa2 <- ggplot()+
+  geom_sf(data = cultura_barrio, aes(fill = cantidad), color="white")+
+  scale_fill_gradient(low = "#e2e7ee", high = "#184e77")+
+  theme_light()+
+  guides(fill = FALSE)
+```
+
+```{r, fig.width = 10, fig.height = 5}
+compracion <- grid.arrange(mapa1, mapa2, nrow = 1)
+```
+
+Comparando ambos mapas, si bien se observa cierta relación también se observa un desvío en la zona norte. Hay que considerar que hasta el momento se esta trabajando sobre la cantidad de establecimientos por barrio y que los barrios de la ciudad son de muy diferentes superficies. Si bien San Nicolás y Palermo cuentan con una cantidad similar de establecimientos, San Nicolas es un barrio céntrico y de menor superficie que Palermo, el barrio mas amplio de la ciudad.
+
+Para lograr un mapa que refleje mejor la realidad de la oferta de establecimientos culturales por barrio es conveniente trabajar con la densidad.
+  
+```{r message=FALSE}
+library(scales)
+```
+
+```{r, fig.width = 11, fig.height = 11}
 ggplot()+
   geom_sf(data = cultura_barrio, aes(fill = cantidad/AREA*1000000), color="white")+
+  geom_sf_label(data=cultura_barrio, aes(label=BARRIO), size = 2, nudge_y = 0.0012,
+                label.padding = unit(0.1, "lines"), 
+                label.r = unit(0.1, "lines"),
+                fontface = "bold")+
+  geom_sf_label(data=cultura_barrio, aes(label=scales::number(cantidad/AREA*1000000, accuracy = 0.1)), size = 2.5, nudge_y = -0.0012,
+                label.padding = unit(0.1, "lines"), 
+                label.r = unit(0.1, "lines"),
+                fontface = "bold")+
   labs(title = "Espacios Culturales por Km2",
     subtitle = "Ciudad Autonoma de Buenos Aires",
-    fill = "Cantidad/Km2")+
-  scale_fill_gradient(low = "#f5f3f4", high = "#22577a")+
-  theme_light()
-```
-
-
-```{r}
-ggplot()+
-  geom_bin2d(data = cultura, aes(x = LONGITUD, y = LATITUD), bins = 40)+
-  geom_sf(data = barrios, alpha=0)+
-  labs(title = "Densidad de Espacios Culturales",
-    subtitle = "Ciudad Autonoma de Buenos Aires")+
-  scale_fill_gradient(low = "#ffc300", high = "#22577a")+
+    fill = "Cantidad/Km2",
+    x = NULL,
+    y = NULL)+
+  scale_fill_gradient(low = "#e2e7ee", high = "#184e77")+
   theme_light()+
-  theme(axis.title.x = element_blank(),
-        axis.title.y = element_blank())+
-  guides(fill = guide_colorbar(title = NULL))
+  theme(legend.position = "bottom")
 ```
 
+En este mapa que muestra la cantidad de establecimientos culturales por kilómetro cuadrado se puede ver claramente la mayor concentración en los barrios de San Nicolás, Monserrat y San Telmo con 98.7, 81.4 y 63.3 establecimientos por km2 respectivamente. Esta información coincide con lo reflejado en el gráfico facetado, ya que estos 3 barrios pertenecen a la Comuna 1. En contraposición se observa que en Palermo hay 13.3 establecimientos por km2, corroborando que la gran cantidad de establecimientos totales que tiene el barrio están relacionadas con la gran superficie del barrio mas que con su ubicación.
 
+Así mismo es interesante ver en este mapa, como hacia la periferia y especialmente hacia el sur de la ciudad existe una oferta de difusión cultural muy inferior, ubicándose en el extremo los barrios de Villa Soldati y Villa Riachuelo con solo 0.5 establecimientos culturales por km2.
 
-```{r, fig.width = 15, fig.height = 12}
+Finalmente para obtener un “zoom” gráfico de esta distribución de oferta cultural, se realiza un mapa de densidad facetado por tipo de establecimiento.
+
+```{r, fig.width = 20, fig.height = 20}
 ggplot()+
-  geom_bin2d(data = cultura, aes(x = LONGITUD, y = LATITUD), show.legend = FALSE, bins = 40)+
+  geom_bin2d(data = dif_cultural, aes(x = LONGITUD, y = LATITUD), show.legend = FALSE, bins = 50)+
   geom_sf(data = barrios, alpha=0)+
   labs(title = "Densidad de Espacios Culturales",
     subtitle = "Ciudad Autonoma de Buenos Aires")+
-  scale_fill_gradient(low = "#ffc300", high = "#22577a")+
+  scale_fill_gradient(low = "#ffb703", high = "#184e77")+
   theme_light()+
   theme(axis.title.x = element_blank(),
         axis.title.y = element_blank(),
         axis.text.x = element_blank(),
         axis.text.y = element_blank(),
-        text = element_text(size = 12),
-        plot.title = element_text(size = 20, face = "bold"),
-        plot.subtitle = element_text(size = 18))+
-  facet_wrap(~FUNCION_PR, ncol = 5)
+        text = element_text(size = 14),
+        plot.title = element_text(size = 22),
+        plot.subtitle = element_text(size = 20))+
+  facet_wrap(~FUNCION_PR, ncol = 3)
 ```
 
+Se puede ver que la concentración en el centro de la ciudad se compone principalmente de bibliotecas, monumentos y lugares históricos, museos y salas de teatro. También se puede ver cierta homogeneidad en la oferta de anfiteatros. Y se destaca la escasa oferta de difusión cultural en la zona sur de la ciudad, con ausencia de clubes de música, galerías de arte, monumentos históricos, museos, cines y teatros.
 
 
+### Reflexiones Finales
 
+A lo largo del presente trabajo se realizó un análisis sobre la disponibilidad de espacios culturales en la Ciudad Autónoma de Buenos Aires. Se detectó mayor oferta en el centro de la ciudad y esto puede argumentarse por su historia dado que la ciudad fue creciendo de manera concéntrica a partir de ese centro. Incluso, se evidencia esta situación en la clara concentración de monumentos y lugares históricos en el área.
 
+Así mismo se estima que sería muy ilustrativo cruzar estos datos con la información sobre la red de transporte para evaluar la accesibilidad a los espacios culturales y si la ubicación de estos tiene relación directa con la infraestructura vial.
+
+En este sentido no es menor la escasa disponibilidad de oferta cultural en la zona sur de la ciudad, área históricamente relegada y con menor desarrollo de infraestructura.
+Se evidencia lo ilustrativo que resulta la visualización gráfica de información sobre infraestructura urbana para la toma de decisiones relativas al desarrollo urbano.
 
 
 
